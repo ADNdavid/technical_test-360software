@@ -15,16 +15,21 @@ class ProductSearchRequest(BaseModel):
 
 @router.post('/search')
 async def search_products(req: ProductSearchRequest, request: Request):
-    embed_svc = request.app.state.embed_svc
     product_repo = request.app.state.product_repo
+    embed_svc = request.app.state.embed_svc
     settings = request.app.state.settings
+
+    if product_repo is None or embed_svc is None:
+        raise HTTPException(status_code=503, detail="Search service unavailable")
 
     if not req.query:
         raise HTTPException(status_code=400, detail="query is required")
 
     q_emb = embed_svc.embed_text(req.query)
-    results = product_repo.top_k_similar(q_emb, k=settings.TOP_K)
+    results = product_repo.top_k_similar(q_emb, req.query, k=settings.TOP_K)
     # round similarity
     for r in results:
         r['similarity'] = round(r['similarity'], 4)
+        r['semantic_similarity'] = round(r.get('semantic_similarity', 0.0), 4)
+        r['text_match'] = round(r.get('text_match', 0.0), 4)
     return {"query": req.query, "results": results}

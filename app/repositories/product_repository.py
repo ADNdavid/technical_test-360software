@@ -127,20 +127,53 @@ class ProductRepository:
 
         self.embeddings = embeddings
 
-    def top_k_similar(self, query_embedding: np.ndarray, k: int = 5) -> List[dict]:
-        from sklearn.metrics.pairwise import cosine_similarity
+    def _text_match_score(self, query: str, text: str) -> float:
+        if not query or not text:
+            return 0.0
+        query = query.lower().strip()
+        text = text.lower().strip()
+        if query in text:
+            return 1.0
+        # partial match score based on token overlap
+        query_tokens = set(query.split())
+        text_tokens = set(text.split())
+        if not query_tokens:
+            return 0.0
+        overlap = len(query_tokens & text_tokens)
+        score = overlap / len(query_tokens)
+        return float(score)
+
+    def top_k_similar(self, query_embedding: np.ndarray, query_text: str, k: int = 5) -> List[dict]:
         if self.embeddings is None or len(self.embeddings) == 0:
             return []
-        sims = cosine_similarity(self.embeddings, query_embedding.reshape(1, -1)).reshape(-1)
-        idx = np.argsort(sims)[::-1][:k]
+        query = query_embedding.reshape(1, -1)
+        query_norm = np.linalg.norm(query)
+        if query_norm == 0:
+            return []
+        embeddings_norm = np.linalg.norm(self.embeddings, axis=1)
+        zero_mask = embeddings_norm == 0
+        embeddings_norm[zero_mask] = 1.0
+        semantic_sims = np.dot(self.embeddings, query.flatten()) / (embeddings_norm * query_norm)
+
         results = []
-        for i in idx:
+        for i, sim in enumerate(semantic_sims):
             row = self.products.iloc[i].to_dict()
+            category = str(row.get('nompro', '') or row.get('tipo_inv', ''))
+            description = str(row.get('descripcion', ''))
+            text_score = max(
+                self._text_match_score(query_text, category),
+                self._text_match_score(query_text, description),
+            )
+            # combine semantic similarity with lexical match
+            score = 0.7 * float(sim) + 0.3 * text_score
             results.append({
                 "product_id": str(row.get('PLU') or row.get('codpro') or i),
-                "name": row.get('nompro', ''),
-                "description": row.get('descripcion', ''),
-                "category": row.get('categoria', ''),
-                "similarity": float(sims[i])
+                "description": description,
+                "category": category,
+                "similarity": float(score),
+                "semantic_similarity": float(sim),
+                "text_match": float(text_score),
             })
-        return results
+
+        results.sort(key=lambda item: item['similarity'], reverse=True)
+        return results[:k]

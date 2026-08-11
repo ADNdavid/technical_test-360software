@@ -1,5 +1,5 @@
 from typing import List
-import numpy as np
+import random
 
 class RecommendationService:
     def __init__(self, product_repo, sales_repo, settings):
@@ -12,6 +12,10 @@ class RecommendationService:
         if not self.sales_repo.customer_exists(customer_id):
             raise KeyError("Customer not found")
 
+        # fallback aleatorio cuando no hay API key de Google disponible
+        if not self.settings.GOOGLE_API_KEY:
+            return self._random_suggestions(customer_id)
+
         purchases = self.sales_repo.purchases_by_customer(customer_id)
         if purchases.empty:
             # fallback to popular products
@@ -19,8 +23,9 @@ class RecommendationService:
             return self._products_by_ids(popular)
 
         # priority 1: products bought previously by frequency
-        freq = purchases.groupby('codpro')['cantped'].sum().reset_index().sort_values('cantped', ascending=False)
-        bought_ids = list(freq['codpro'].astype(str).values)
+        product_col = self.sales_repo._product_key_column()
+        freq = purchases.groupby(product_col)['cantped'].sum().reset_index().sort_values('cantped', ascending=False)
+        bought_ids = list(freq[product_col].astype(str).values)
 
         results = []
         seen = set()
@@ -33,7 +38,8 @@ class RecommendationService:
                 return self._products_by_ids(results)
 
         # priority 2: categories frequently bought but not purchased
-        merged = purchases.merge(self.product_repo.products, left_on='codpro', right_on='codpro', how='left')
+        product_col = self.sales_repo._product_key_column()
+        merged = purchases.merge(self.product_repo.products, left_on=product_col, right_on='PLU', how='left')
         top_cats = merged['categoria'].value_counts().index.tolist()
         for cat in top_cats:
             candidates = self.product_repo.products[self.product_repo.products.get('categoria','')==cat]
@@ -58,13 +64,36 @@ class RecommendationService:
 
         return self._products_by_ids(results)
 
+    def _random_suggestions(self, customer_id: str) -> List[dict]:
+        df = self.product_repo.products
+        if df.empty:
+            return []
+
+        limit = self.settings.SUGGESTED_PRODUCTS_LIMIT
+        seed = hash(customer_id) & 0xFFFFFFFF
+        random.seed(seed)
+
+        ids = df['codpro'].astype(str).tolist()
+        sample_ids = random.sample(ids, min(limit, len(ids)))
+        return self._products_by_ids(sample_ids)
+
     def _products_by_ids(self, ids: List[str]) -> List[dict]:
         out = []
+        seen = set()
         for pid in ids[: self.settings.SUGGESTED_PRODUCTS_LIMIT]:
             df = self.product_repo.products
-            row = df[df['codpro'].astype(str) == str(pid)]
+            row = df[df['PLU'].astype(str) == str(pid)]
             if row.empty:
-                continue
+                row = df[df['codpro'].astype(str) == str(pid)]
+                if row.empty:
+                    continue
             row = row.iloc[0]
-            out.append({"product_id": str(row.get('codpro')), "product_name": row.get('nompro')})
+            product_id = str(row.get('PLU') or row.get('codpro') or pid)
+            if product_id in seen:
+                continue
+            seen.add(product_id)
+            out.append({
+                "product_id": product_id,
+                "product_name": row.get('descripcion', '')
+            })
         return out
