@@ -4,4 +4,16 @@ version = "0.1.0"
 description = "Prueba técnica para 360 Software: Aplicación que por medio de Embeddings de Google permita la búsqueda y generación de recomendaciones de productos."
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.5",
+    "numpy>=1.26.0",
+    "scikit-learn>=1.3.0",
+    "google-genai>=0.4.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.8.0",
+    "python-dotenv>=1.0.0",
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+]
