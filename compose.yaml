@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 360software_app
+    ports:
+      - '8000:8000'
+    environment:
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GOOGLE_EMBEDDING_MODEL: ${GOOGLE_EMBEDDING_MODEL}
+      PRODUCTS_EXCEL_PATH: ${PRODUCTS_EXCEL_PATH}
+      SALES_EXCEL_PATH: ${SALES_EXCEL_PATH}
+      TOP_K: ${TOP_K}
+      SUGGESTED_PRODUCTS_LIMIT: ${SUGGESTED_PRODUCTS_LIMIT}
