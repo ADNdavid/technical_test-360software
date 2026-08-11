@@ -1,0 +1,7 @@
+[project]
+name = "technical-test-360software"
+version = "0.1.0"
+description = "Prueba técnica para 360 Software: Aplicación que por medio de Embeddings de Google permita la búsqueda y generación de recomendaciones de productos."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
