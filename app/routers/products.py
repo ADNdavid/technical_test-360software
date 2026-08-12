@@ -1,19 +1,59 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, validator
-from typing import Any
-import numpy as np
+from typing import List, Literal
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
+
 class ProductSearchRequest(BaseModel):
-    query: str = Field(..., min_length=3)
+    """Request payload for semantic product search."""
 
-    @validator('query')
-    def strip_query(cls, v):
-        return v.strip()
+    query: str = Field(
+        ...,
+        min_length=3,
+        description="Texto de búsqueda del producto que se desea localizar semánticamente.",
+        examples=["tuerca de 1/2", "caja de tornillos 5mm"],
+    )
+
+    @field_validator("query")
+    @classmethod
+    def strip_query(cls, v: str) -> str:
+        value = v.strip()
+        if not value:
+            raise ValueError("query no puede estar vacío")
+        return value
 
 
-@router.post('/search')
+class ProductMatch(BaseModel):
+    """Item devuelto por la búsqueda semántica."""
+
+    product_id: str = Field(..., description="Identificador del producto.")
+    description: str = Field(..., description="Descripción del producto.")
+    category: str = Field(..., description="Categoría o nombre del producto relacionado.")
+    similarity: float = Field(..., description="Puntaje combinado de similitud semántica y texto.")
+    semantic_similarity: float = Field(..., description="Similitud semántica calculada por el modelo de embeddings.")
+    text_match: float = Field(..., description="Coincidencia con términos del texto de la consulta.")
+
+
+class ProductSearchResponse(BaseModel):
+    """Respuesta de búsqueda de productos."""
+
+    query: str = Field(..., description="Consulta original normalizada enviada por el cliente.")
+    results: List[ProductMatch] = Field(..., description="Listado ordenado por mayor similitud.")
+
+
+@router.post(
+    '/search',
+    response_model=ProductSearchResponse,
+    summary="Buscar productos por texto",
+    description="Busca productos usando embeddings semánticos y una coincidencia textual ligera para ordenar los resultados.",
+    responses={
+        200: {"description": "Búsqueda realizada correctamente."},
+        400: {"description": "La consulta no es válida."},
+        503: {"description": "El servicio de búsqueda no está disponible."},
+    },
+)
 async def search_products(req: ProductSearchRequest, request: Request):
     product_repo = request.app.state.product_repo
     embed_svc = request.app.state.embed_svc
@@ -27,7 +67,6 @@ async def search_products(req: ProductSearchRequest, request: Request):
 
     q_emb = embed_svc.embed_text(req.query)
     results = product_repo.top_k_similar(q_emb, req.query, k=settings.TOP_K)
-    # round similarity
     for r in results:
         r['similarity'] = round(r['similarity'], 4)
         r['semantic_similarity'] = round(r.get('semantic_similarity', 0.0), 4)

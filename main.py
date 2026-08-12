@@ -15,7 +15,11 @@ product_repo = ProductRepository(settings)
 sales_repo = SalesRepository(settings)
 embed_svc = EmbeddingService(settings)
 
-app = FastAPI(title="Ferretería - Búsqueda Semántica")
+app = FastAPI(
+    title="Ferretería - Búsqueda Semántica",
+    description="API para búsqueda semántica de productos y sugerencias de venta según historial de clientes.",
+    version="1.0.0",
+)
 app.state.settings = settings
 app.state.product_repo = product_repo
 app.state.sales_repo = sales_repo
@@ -41,6 +45,15 @@ app.include_router(products.router)
 app.include_router(customers.router)
 
 
-@app.get("/health", tags=["Health"])
+@app.get(
+    "/health",
+    tags=["Health"],
+    summary="Verificar estado del servicio",
+    description="Endpoint de salud para comprobar que la API está levantada y responde correctamente.",
+    response_model=dict,
+    responses={
+        200: {"description": "Servicio disponible."},
+    },
+)
 async def health():
     return {"status": "ok"}
